@@ -1,0 +1,129 @@
+
+#**Johns Hopkins University-Practical Machine Learning**
+```{r echo= FALSE, results='hide'}
+setwd("C:/Users/c1992/Desktop/8-Practical Machine Learning")
+```
+###*LIN, WEI-YU, Dec.22.2018*
+##Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively.These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, 6 participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways, data from accelerometers on the belt, forearm, arm, and dumbell of these participants is used to analyze, thus to predict the manner in which they did the exercise.
+
+
+## i.Exploring Data 
+
+```{r load, cache= TRUE}
+train <- read.csv("../pml-training.csv", header=TRUE)
+test <- read.csv("../pml-testing.csv", header= TRUE)
+```
+
+```{r len}
+dim(train)
+dim(test)
+
+```
+
+
+
+There are 160 variables in the dataset, with 19622 samples in the training set and 20 samples in the testing dataset.
+
+```{r countNA, cache= TRUE}
+apply(train,2,is.null)
+natrain <- apply(train,2,is.na)
+natest <- apply(test,2,is.na)
+nacnt_train <- apply(natrain, 2, sum)
+nacnt_test <- apply(natest,2,sum)
+indTrain <- lapply(nacnt_train, function(y){y!=19216})
+indtest <- lapply(nacnt_test, function(y){y!=20})
+ind <- ifelse(indTrain==1 & indtest==1,1,0)
+max(nacnt_train)
+max(nacnt_test)
+```
+
+It can be observed that there are at most 19216 NAs in each observations per variable. Since there are 19216 observations out of 19622 are NAs in few selected variables, instead of implementing imputations, removing these variables might be more optimal.  
+
+```{r removeNA, cache=TRUE}
+library(caret)
+train <- train[ind==1]
+test <- test[ind==1]
+names(test) <- names(train)
+test <- test[,-60]
+na <- apply(train,2, is.na)
+apply(na,2,sum)
+```
+
+After removing these variables, there are 93 variables left to further analyzing and predicting. Reszie the training set to 9811 observations(50%proportion), in order to increasing training efiiciency.
+
+```{r resize}
+#sptrain <- sample(1:19622,19622*0.5)
+#train <- train[sptrain,]
+train <- train[,-c(1,2)]
+test <- test[,-c(1,2)]
+dim(train)
+dim(test)
+```
+
+## ii.Model Fitting
+### - Classification Tree
+```{r tree}
+library(caret)
+library(parallel)
+library(doParallel)
+cluster <- makeCluster(detectCores()-1)
+registerDoParallel(cluster)
+
+fitcontrol= trainControl(method="cv", number=5, allowParallel = TRUE) 
+
+fittree <- train(classe~., data= train, method="rpart", trControl= fitcontrol)
+
+
+
+stopCluster(cluster)
+
+```
+
+Adopt Classification Trees to fit the model with training dataset, and 5-fold cross validation is being used in the fitting.
+
+```{r accuracy}
+fittree
+```
+Model accuracy should be 0.4755921, i.e. in sample error rate should be 1-0.4755921= 0.5244079. Predicted values and classification tree is shown as below.
+
+```{r pred, cache= TRUE}
+library(rattle)
+suppressWarnings(fancyRpartPlot(fittree$finalModel, sub= " "))
+predtree <- predict(fittree, test)
+testTREE <- test
+testTREE$predicted <- predtree
+testTREE
+
+```
+
+### - Random Forest
+```{r rf}
+library(caret)
+library(parallel)
+library(doParallel)
+cluster <- makeCluster(detectCores()-1)
+registerDoParallel(cluster)
+fitcontrol= trainControl(method="cv", number=5, allowParallel = TRUE) 
+fitrf <- train(classe~., data= train, method= "rf", trControl= fitcontrol)
+
+stopCluster(cluster)
+```
+
+```{r rf accuracy, cache= TRUE}
+fitrf
+```
+
+While using Random forest, the accuracy is 0.9993375, i.e., in sample error rate should be approximately zero. The predicted values are shown as below.
+
+```{r predrf, cache=TRUE}
+predrf <- predict(fitrf, test)
+testRF <- test
+testRF$predicted <- predrf
+testRF
+```
+
+##Summary
+
+In this dataset, Random Forest performs better than Classification Tree, so the predicted values from random forest should be adopted while only these two algorithms are considered.
+
